@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCommunity } from './community.mjs';
 import { createProxyGateway } from './proxy-gateway.mjs';
+import { mintRemoteTicket } from './proxy-token.mjs';
 import { connectStore } from './db-store.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -64,7 +65,7 @@ const community = await createCommunity({
 const GATEWAY_PORT = Number(process.env.SUPERMAN_BROWSER_PORT || 3001);
 const BROWSER_CODE = String(process.env.PROXY_ACCESS_CODE || '123456789');
 const BROWSER_PUBLIC = String(process.env.PROXY_PUBLIC_URL || '').trim().replace(/\/+$/, '');
-const browserGateway = createProxyGateway({port:GATEWAY_PORT, upstreamPort:PROXY_PORT,staticDir:PUBLIC});
+const browserGateway = process.env.RENDER ? null : createProxyGateway({port:GATEWAY_PORT, upstreamPort:PROXY_PORT,staticDir:PUBLIC});
 const browserAttempts = new Map();
 function browserOrigin(req) {
   if(BROWSER_PUBLIC){
@@ -300,8 +301,9 @@ const server = http.createServer(async (req, res) => {
     }
     browserAttempts.delete(key);
     const base=browserOrigin(req);
-    if(!base)return json(res,409,{error:'For remote access, start a second Cloudflare Tunnel to port 3001 and set PROXY_PUBLIC_URL in .env.local. See SUPERMAN-PROXY-SETUP.md.'});
-    const ticket=browserGateway.mintTicket();
+    if(!base)return json(res,409,{error:'SUPERMAN Browser is not deployed yet. Add PROXY_PUBLIC_URL in the Render chat service after deploying a separate SUPERMAN Browser web service.'});
+    if(process.env.RENDER && (!process.env.PROXY_GATEWAY_SECRET || process.env.PROXY_GATEWAY_SECRET.length<32))return json(res,503,{error:'PROXY_GATEWAY_SECRET is missing from the Render chat service.'});
+    const ticket=process.env.RENDER ? mintRemoteTicket(process.env.PROXY_GATEWAY_SECRET) : browserGateway.mintTicket();
     return json(res,200,{url:`${base}/_superman/start?ticket=${encodeURIComponent(ticket)}`});
   }
   if (pathname === '/hub/api/me' && req.method === 'GET') return json(res, 200, {
@@ -367,7 +369,7 @@ server.on('upgrade', forwardWebSocket);
 const heartbeat = setInterval(() => { for (const s of streams) { try { s.res.write(': ping\n\n'); } catch { streams.delete(s); } } },25000);
 heartbeat.unref();
 const HUB_HOST = process.env.HUB_HOST || '127.0.0.1';
-browserGateway.start().catch(error=>{console.error('[SuperMan] Browser gateway failed to start:',error.message);});
+if(browserGateway)browserGateway.start().catch(error=>{console.error('[SuperMan] Browser gateway failed to start:',error.message);});
 server.listen(PORT, HUB_HOST, ()=>{
   console.log(`[SuperMan] Open http://localhost:${PORT}/hub/`);
   console.log(`[SuperMan] Owner-only settings; public proxy ${PROXY_ENABLED ? 'ENABLED (do not share this origin with friends)' : 'DISABLED'}; listening on ${HUB_HOST}.`);

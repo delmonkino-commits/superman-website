@@ -8,6 +8,7 @@ import net from 'node:net';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { verifyRemoteTicket } from './proxy-token.mjs';
 
 const COOKIE = 'superman_browser_key';
 const SESSION_MS = 60 * 60 * 1000;
@@ -47,8 +48,9 @@ function safeHeaders(req, upstreamPort) {
   return headers;
 }
 
-export function createProxyGateway({port=3001, upstreamPort=8080, host='127.0.0.1', staticDir, logger=console} = {}) {
+export function createProxyGateway({port=3001, upstreamPort=8080, host='127.0.0.1', staticDir, logger=console, sharedSecret=null} = {}) {
   const tickets = new Map();
+  const spentRemoteTickets = new Map();
   const sessions = new Map();
   function mintTicket() {
     const key = crypto.randomBytes(32).toString('base64url');
@@ -63,6 +65,14 @@ export function createProxyGateway({port=3001, upstreamPort=8080, host='127.0.0.
     return true;
   }
   function checkTicket(ticket) {
+    if(sharedSecret){
+      const expires=verifyRemoteTicket(ticket,sharedSecret);
+      if(!expires)return false;
+      const digest=crypto.createHash('sha256').update(ticket).digest('hex');
+      if(spentRemoteTickets.has(digest))return false;
+      spentRemoteTickets.set(digest,expires);
+      return true;
+    }
     const expires = tickets.get(ticket);
     tickets.delete(ticket); // single-use even if expired
     return Boolean(expires && Date.now() <= expires);
@@ -96,6 +106,10 @@ export function createProxyGateway({port=3001, upstreamPort=8080, host='127.0.0.
   const server=http.createServer((req,res)=>{
     if (!req.url) return bad(res,400,'Invalid request','The request is missing a URL.');
     let parsed;try{parsed=new URL(req.url,'http://localhost');}catch{return bad(res,400,'Invalid request','The URL could not be read.');}
+    if(parsed.pathname==='/_superman/health' && req.method==='GET'){
+      res.writeHead(200,{'content-type':'application/json; charset=utf-8',...SECURE_HEADERS});
+      return res.end(JSON.stringify({ok:true,service:'SUPERMAN Browser gateway'}));
+    }
     if(parsed.pathname==='/_superman/start' && req.method==='GET') {
       const ticket=parsed.searchParams.get('ticket')||'';
       if(!checkTicket(ticket))return bad(res,403,'Access required','This link is expired or already used. Unlock the proxy again from SuperMan.');
@@ -129,6 +143,7 @@ export function createProxyGateway({port=3001, upstreamPort=8080, host='127.0.0.
   // Remove expired tickets/sessions; no persistence across server restarts.
   const cleanup=setInterval(()=>{
     const now=Date.now();for(const [k,v] of tickets)if(v<=now)tickets.delete(k);
+    for(const [k,v] of spentRemoteTickets)if(v<=now)spentRemoteTickets.delete(k);
     for(const [k,v] of sessions)if(v<=now)sessions.delete(k);
   },60000);cleanup.unref();
   function start(){return new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,host,()=>{server.removeListener('error',reject);logger.log(`[SuperMan] SUPERMAN Browser gateway listening at http://${host}:${port}/ (separate origin).`);resolve(server);});});}
