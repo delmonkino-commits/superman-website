@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCommunity } from './community.mjs';
 import { createProxyGateway } from './proxy-gateway.mjs';
+import { connectStore } from './db-store.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
@@ -51,10 +52,15 @@ const baseSettings = JSON.parse(fs.readFileSync(path.join(ROOT, 'site-config.jso
 const SETTINGS_FILE = path.join(DATA, 'site-config.json');
 const MESSAGES_FILE = path.join(DATA, 'messages.json');
 function readJSON(file, fallback) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } }
-let settings = validateSettings(readJSON(SETTINGS_FILE, baseSettings));
-let messages = readJSON(MESSAGES_FILE, {});
+const cloudStore = await connectStore();
+let settings = validateSettings(cloudStore ? await cloudStore.load('settings') : readJSON(SETTINGS_FILE, baseSettings));
+let messages = cloudStore ? (await cloudStore.load('messages') || {}) : readJSON(MESSAGES_FILE, {});
 for (const [k, v] of Object.entries(messages)) if (!Array.isArray(v)) delete messages[k];
-const community = createCommunity({dataDir:DATA, legacyMessages:messages});
+const community = await createCommunity({
+  dataDir: DATA, legacyMessages: messages,
+  initialState: cloudStore ? await cloudStore.load('community') : null,
+  saveState: cloudStore ? value => cloudStore.save('community', value) : null
+});
 const GATEWAY_PORT = Number(process.env.SUPERMAN_BROWSER_PORT || 3001);
 const BROWSER_CODE = String(process.env.PROXY_ACCESS_CODE || '123456789');
 const BROWSER_PUBLIC = String(process.env.PROXY_PUBLIC_URL || '').trim().replace(/\/+$/, '');
@@ -203,7 +209,7 @@ async function login(req, res) {
   loginFormTokens.delete(submittedCsrf);
   const validCsrf = /^[a-f0-9]{64}$/.test(submittedCsrf) &&
     Boolean(issued) && Date.now() - issued.time <= 600000 &&
-    issued.peer === String(req.socket.remoteAddress || '') &&
+    (process.env.RENDER || issued.peer === String(req.socket.remoteAddress || '')) &&
     issued.agent === String(req.headers['user-agent'] || '');
   if (!validCsrf) return json(res, 403, { error: 'Login form expired. Open /hub/login again and try once.' });
   const value = params.get('password') || '';
@@ -318,8 +324,10 @@ const server = http.createServer(async (req, res) => {
     if (!isAdmin(req)) return json(res, 403, {error:'Only the owner can edit SuperMan settings'});
     if (!checkOrigin(req)) return json(res, 403, {error:'Origin mismatch'});
     if (!rateLimit(req, 30)) return json(res, 429, {error:'Too many requests'});
-    try { settings = validateSettings(await bodyJSON(req, 16384)); saveJSON(SETTINGS_FILE, settings); broadcast('settings', settings); return json(res,200,settings); }
-    catch { return json(res,400,{error:'Invalid settings'}); }
+    try { settings = validateSettings(await bodyJSON(req, 16384));
+      if (cloudStore) await cloudStore.save('settings', settings); else saveJSON(SETTINGS_FILE, settings);
+      broadcast('settings', settings); return json(res,200,settings); }
+    catch (error) { console.error('[SuperMan] Settings save failed:',error.message); return json(res,503,{error:'Unable to save settings'}); }
   }
   if (pathname === '/hub/api/history' && req.method === 'GET') {
     const channel = url.searchParams.get('channel') || settings.welcomeChannel;
