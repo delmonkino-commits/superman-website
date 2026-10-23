@@ -1,0 +1,4 @@
+/* Visual rebrand for upstream home screen only. Does not modify proxy engine internals. */
+:root { --superman-accent: #a684ff; }
+img[src*="invisi"][class*="logo"],img[src*="Invisi"][class*="logo"] { content: url('/_superman/logo.svg') !important; }
+img[alt*="Invisi"],img[alt*="Scramjet"],img[alt*="Ultraviolet"] { max-height: 110px; object-fit: contain; }

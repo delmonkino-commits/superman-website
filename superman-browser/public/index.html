@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0d18">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>SUPERMAN — Browse without limits</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="app" id="app">
+<header class="toolbar">
+  <a class="identity" href="/" aria-label="SUPERMAN home"><img src="/logo.svg" alt=""><span>SUPERMAN<small>BROWSER</small></span></a>
+  <div class="tabs" id="tabs" role="tablist" aria-label="Browser tabs"></div>
+  <button id="add-tab" class="icon-button" title="New tab" aria-label="New tab">+</button>
+  <button id="settings-btn" class="icon-button" title="Appearance settings" aria-label="Settings">⚙</button>
+</header>
+<div class="navigation">
+  <button class="icon-button" id="back" aria-label="Back">←</button>
+  <button class="icon-button" id="forward" aria-label="Forward">→</button>
+  <button class="icon-button" id="reload" aria-label="Reload">↻</button>
+  <form id="address-form" class="address-shell" autocomplete="off"><span class="lock" aria-hidden="true">◈</span><input id="address" type="text" spellcheck="false" autocapitalize="off" aria-label="Search or enter a URL" placeholder="Search or enter a website…"><button type="submit">Go ↗</button></form>
+  <button class="icon-button" id="home" title="Home" aria-label="Home">⌂</button>
+  <button class="icon-button panic" id="panic" title="Blank this tab immediately" aria-label="Panic">✕</button>
+</div>
+<main class="workspace" id="workspace">
+  <section class="start" id="start"><div class="glow"></div><div class="start-inner">
+    <img class="hero-logo" src="/logo.svg" alt="SUPERMAN emblem">
+    <div class="eyebrow">WELCOME TO YOUR OWN WEB</div><h1>SUPERMAN<span> BROWSER</span></h1>
+    <p>Fast access. A fresh perspective. Everything in one place.</p>
+    <form id="search-form" class="search-form"><input id="search" aria-label="Search the web" placeholder="Search the web or type a URL" autocomplete="off"><button type="submit">Explore <span>↗</span></button></form>
+    <div class="shortcuts"><button data-site="https://www.wikipedia.org/">Wikipedia <span>↗</span></button><button data-site="https://example.com">Example <span>↗</span></button><button data-site="https://www.google.com/">Google <span>↗</span></button><button data-site="https://www.reddit.com/">Reddit <span>↗</span></button></div>
+    <div id="status" class="status" role="status">Preparing your browser…</div>
+  </div></section>
+  <div id="frames" class="frames" aria-label="Web pages"></div>
+</main>
+<footer class="footer"><div><span class="live-dot"></span> <span id="connection">Starting engine</span></div><div>SUPERMAN • Browser experience</div></footer>
+<dialog id="settings" class="settings"><form method="dialog" class="settings-panel"><div class="settings-top"><h2>Browser settings</h2><button class="icon-button" value="close" aria-label="Close settings">✕</button></div><p>Changes apply only on this device.</p><label>Custom tab title<input type="text" id="tab-title" maxlength="80" placeholder="SUPERMAN"></label><label>Custom tab favicon (PNG or JPG)<input type="file" id="tab-icon" accept="image/png,image/jpeg"></label><div class="options"><button id="reset-cloak" type="button" class="secondary">Reset appearance</button><button type="submit" class="primary">Done</button></div><hr><p class="muted">Panic shortcut: <strong>Alt + Shift + X</strong>. The page blanks immediately; browsers generally cannot close tabs they did not open.</p><p class="muted">This browser is not a privacy or anonymity service. Sites may log visits and some features may not work through a proxy.</p></form></dialog>
+</div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

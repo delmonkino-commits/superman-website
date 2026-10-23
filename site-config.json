@@ -1,0 +1,14 @@
+{
+  "name": "SuperMan",
+  "tagline": "YOUR UNIVERSE. UNLOCKED.",
+  "description": "One universe. Infinite possibilities.",
+  "accent": "#a684ff",
+  "welcomeChannel": "general",
+  "channels": [
+    {"id":"general","name":"general","description":"The place where everything begins","category":"COMMUNITY"},
+    {"id":"introductions","name":"introductions","description":"Say hello to the SuperMan universe","category":"COMMUNITY"},
+    {"id":"showcase","name":"showcase","description":"Share your latest creations","category":"COMMUNITY"},
+    {"id":"browser-talk","name":"browser-talk","description":"Chat about the browser and new ideas","category":"BROWSER"},
+    {"id":"suggestions","name":"suggestions","description":"Tell us what you'd like to see","category":"BROWSER"}
+  ]
+}

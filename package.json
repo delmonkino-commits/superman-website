@@ -1,0 +1,19 @@
+{
+  "name": "superman-hub",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SuperMan: community chat and self-hosted web proxy gateway",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "brand": "node scripts/brand.mjs",
+    "start": "node launch.mjs",
+    "start:hub": "node server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "share": "node scripts/share.mjs"
+  },
+  "license": "MIT"
+}
