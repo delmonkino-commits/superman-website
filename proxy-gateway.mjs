@@ -11,6 +11,7 @@ import path from 'node:path';
 import { verifyRemoteTicket } from './proxy-token.mjs';
 
 const COOKIE = 'superman_browser_key';
+const LOGIN_MAX_BYTES = 1024;
 const SESSION_MS = 60 * 60 * 1000;
 const TICKET_MS = 45 * 1000;
 const BADGE_CSS = `body{--superman-brand:#997aff}`;
@@ -77,6 +78,36 @@ export function createProxyGateway({port=3001, upstreamPort=8080, host='127.0.0.
     tickets.delete(ticket); // single-use even if expired
     return Boolean(expires && Date.now() <= expires);
   }
+  // Optional standalone login for the Zite version of SUPERMAN.
+  // Keep the existing one-time ticket flow for the legacy chat.
+  const accessCode = String(process.env.PROXY_ACCESS_CODE || '').trim();
+  function loginScreen(res, error='') {
+    const safeError = error ? '<p style="color:#ffb9c2">Incorrect code. Try again.</p>' : '';
+    res.writeHead(200, {'content-type':'text/html; charset=utf-8', ...SECURE_HEADERS, 'x-frame-options':'DENY'});
+    res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SUPERMAN · Unlock</title><style>body{min-height:100vh;margin:0;display:grid;place-items:center;background:#0b0d1b;color:#edf0ff;font:16px system-ui}.panel{width:min(90vw,420px);padding:32px;border-radius:20px;background:#181b2c;border:1px solid #3a3b56;box-sizing:border-box}input,button{box-sizing:border-box;width:100%;padding:13px;border-radius:9px;font:inherit}input{background:#0b0d1b;color:#fff;border:1px solid #6f7090}button{margin-top:14px;color:#fff;background:#7754cf;border:0;cursor:pointer}</style><section class="panel"><h1>SUPERMAN Proxy</h1><p>Enter the proxy access code shared by the host.</p>${safeError}<form action="/_superman/unlock" method="post"><input type="password" name="code" autocomplete="off" required maxlength="128" placeholder="Access code"><button type="submit">Unlock Proxy</button></form></section>`);
+  }
+  function setBrowserSession(req,res) {
+    const key=crypto.randomBytes(32).toString('base64url');
+    sessions.set(key,Date.now()+SESSION_MS);
+    const secure=req.socket.encrypted || String(req.headers['x-forwarded-proto']||'').split(',')[0]==='https' || String(req.headers.host||'').endsWith('.app.github.dev');
+    res.writeHead(303,{location:'/', 'set-cookie':`${COOKIE}=${key}; HttpOnly; Path=/; SameSite=Lax; Max-Age=3600${secure?'; Secure':''}`, ...SECURE_HEADERS});
+    return res.end();
+  }
+  async function unlockWithCode(req,res) {
+    if (!sameOrigin(req)) return bad(res,403,'Access denied','Please use the login form.');
+    const parts=[];let bytes=0;
+    try {
+      for await (const chunk of req) {
+        bytes+=chunk.length;
+        if(bytes>LOGIN_MAX_BYTES)return bad(res,413,'Too much data','Enter the code only.');
+        parts.push(chunk);
+      }
+      const code=new URLSearchParams(Buffer.concat(parts).toString('utf8')).get('code')||'';
+      const a=Buffer.from(code), b=Buffer.from(accessCode);
+      if (a.length!==b.length || !crypto.timingSafeEqual(a,b)) return loginScreen(res,'invalid');
+      return setBrowserSession(req,res);
+    } catch {return bad(res,400,'Invalid request','Try again.');}
+  }
   function staticFile(res, file, mime) {
     try {res.writeHead(200, {'content-type':mime, ...SECURE_HEADERS}); res.end(fs.readFileSync(path.join(staticDir,file)));}
     catch {bad(res,404,'Not found','This SuperMan asset is missing.');}
@@ -119,7 +150,11 @@ export function createProxyGateway({port=3001, upstreamPort=8080, host='127.0.0.
       res.writeHead(303,{location:'/', 'set-cookie':`${COOKIE}=${key}; HttpOnly; Path=/; SameSite=Lax; Max-Age=3600${secure?'; Secure':''}`, ...SECURE_HEADERS});
       return res.end();
     }
-    if(!validSession(req))return bad(res,401,'SUPERMAN · Locked','Unlock this browser from the Proxy button in your SuperMan chat.');
+    if (accessCode && parsed.pathname==='/_superman/unlock' && req.method==='POST') return void unlockWithCode(req,res);
+    if (!validSession(req)) {
+      if (accessCode && req.method==='GET' && (parsed.pathname==='/' || parsed.pathname==='/_superman/login')) return loginScreen(res);
+      return bad(res,401,'SUPERMAN · Locked', accessCode ? 'Visit the homepage to enter the proxy access code.' : 'Unlock this browser from the Proxy button in your SuperMan chat.');
+    }
     if(parsed.pathname==='/_superman/logout' && req.method==='POST') {
       if(!sameOrigin(req))return bad(res,403,'Access denied','Origin mismatch.');
       sessions.delete(valueOfCookie(req,COOKIE));
